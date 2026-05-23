@@ -167,7 +167,7 @@ function isValidPlan(payload) {
  * @param {import('@vercel/node').VercelRequest}  req
  * @param {import('@vercel/node').VercelResponse} res
  */
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS 헤더는 모든 응답에 공통 적용
   setCorsHeaders(res);
 
