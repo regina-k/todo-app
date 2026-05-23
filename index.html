@@ -669,43 +669,73 @@ function hideLoadingOverlay() {
 async function generateAIPlan(todoId) {
     const todos = loadTodos();
     const todo = todos.find((t) => t.id === todoId);
-    if (!todo) return;
+    if (!todo) {
+        console.warn("[AI플랜] ❌ todo를 찾을 수 없음:", todoId);
+        return;
+    }
 
-    showLoadingOverlay();
+    console.log("[AI플랜] ▶ 시작", { id: todoId, text: todo.text });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error("[AI플랜] ⏱ 타임아웃 — 30초 초과로 요청 중단");
+    }, 30000);
 
     try {
+        showLoadingOverlay();
+        console.log("[AI플랜] 🔒 로딩 오버레이 표시됨");
+        console.log("[AI플랜] 📡 POST /api/generate 요청 전송...");
+
         const response = await fetch("/api/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ idea: todo.text }),
+            signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
+        console.log("[AI플랜] 📥 응답 수신:", response.status, response.statusText);
+
         if (!response.ok) {
-            throw new Error(`서버 오류: ${response.status} ${response.statusText}`);
+            const errBody = await response.text().catch(() => "(본문 없음)");
+            console.error("[AI플랜] ❌ 서버 오류 응답 본문:", errBody);
+            throw new Error(`서버 오류 ${response.status} — ${errBody.slice(0, 200)}`);
         }
 
         const result = await response.json();
+        console.log("[AI플랜] ✅ 응답 JSON:", result);
 
-        // result 구조:
-        // { category: string, summary: string, action_steps: [{step, task, completed}] }
-        // action_steps의 completed 필드는 항상 false로 초기화
         const normalizedPlan = {
             category: result.category || "기타",
             summary: result.summary || "",
             action_steps: (result.action_steps || []).map((s, i) => ({
                 step: s.step ?? i + 1,
                 task: s.task ?? "",
-                completed: false, // 신규 생성 시 항상 미완료
+                completed: false,
             })),
         };
 
+        console.log("[AI플랜] 💾 저장할 플랜:", normalizedPlan);
         saveAIPlan(todoId, normalizedPlan);
         renderTodos();
+        console.log("[AI플랜] ✔ 렌더링 완료");
+
     } catch (err) {
-        console.error("[generateAIPlan] 오류:", err);
-        alert(`AI 플랜 생성에 실패했습니다.\n${err.message}`);
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+            console.error("[AI플랜] ⏱ AbortError — 요청이 타임아웃으로 중단됨");
+            alert("AI 플랜 생성이 시간 초과됐습니다.\n잠시 후 다시 시도해 주세요.");
+        } else {
+            console.error("[AI플랜] ❌ 오류 종류:", err.name);
+            console.error("[AI플랜] ❌ 오류 메시지:", err.message);
+            console.error("[AI플랜] ❌ 스택:", err.stack);
+            alert(`AI 플랜 생성에 실패했습니다.\n\n${err.message}`);
+        }
     } finally {
+        clearTimeout(timeoutId);
         hideLoadingOverlay();
+        console.log("[AI플랜] 🔓 로딩 오버레이 닫힘");
     }
 }
 
