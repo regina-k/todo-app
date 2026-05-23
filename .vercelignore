@@ -1,0 +1,8 @@
+.env
+.git
+test/
+skills/
+prd/
+web_version/
+*.txt
+*.png
