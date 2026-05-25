@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -275,6 +275,9 @@ window.MatrixEngine = MatrixEngine;
 
 const STORAGE_KEY = 'roadmap_plans';
 
+// ── 허용된 카테고리 화이트리스트 (TC-03: 미등록 카테고리 차단) ──
+const VALID_CATEGORIES = ['IT/개발', '자산관리', '루틴/헬스', '마케팅'];
+
 // ── 카테고리 배지 스타일 매핑 ──
 const BADGE_STYLES = {
   'IT/개발':   'bg-blue-500/20 text-blue-300 border border-blue-500/30',
@@ -546,7 +549,9 @@ function handleGenerate() {
   const categorySelect = document.getElementById('category-select');
   const titleError = document.getElementById('title-error');
   const title    = titleInput.value.trim();
-  const category = categorySelect.value;
+  // 카테고리 화이트리스트 검증 (VALID_CATEGORIES에 없으면 기본값으로 fallback)
+  const rawCategory = categorySelect.value;
+  const category = VALID_CATEGORIES.includes(rawCategory) ? rawCategory : 'IT/개발';
 
   // 유효성 검사
   if (!title) {
