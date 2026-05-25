@@ -1,1037 +1,723 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>나의 할 일</title>
-    <style>
-/* ---------- 기본 ---------- */
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 스마트 로드맵 엔진</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* ── 커스텀 애니메이션 ── */
+    @keyframes spin        { to   { transform: rotate(360deg); } }
+    @keyframes spinReverse { to   { transform: rotate(-360deg); } }
+    @keyframes fadeIn      { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes dotPulse    { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
 
-* {
-    box-sizing: border-box;
-}
+    .spinner          { animation: spin        0.8s linear infinite; }
+    .spinner-reverse  { animation: spinReverse 1.1s linear infinite; }
+    .fade-in          { animation: fadeIn 0.3s ease forwards; }
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
-    background: #f5f5f7;
-    color: #222;
-    margin: 0;
-    padding: 2rem 1rem;
-}
+    /* 스크롤바 숨김 */
+    .no-scrollbar                  { -ms-overflow-style:none; scrollbar-width:none; }
+    .no-scrollbar::-webkit-scrollbar { display:none; }
 
-.app {
-    max-width: 600px;
-    margin: 0 auto;
-    background: #fff;
-    padding: 1.5rem;
-    border-radius: 10px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-}
+    /* 로딩 오버레이: hidden 속성 충돌 방지 — display:flex 보다 우선 */
+    #loading-overlay[hidden] { display: none !important; }
 
-.app-header h1 {
-    margin: 0 0 1rem;
-    font-size: 1.4rem;
-}
+    /* 그라데이션 버튼 */
+    .btn-gradient {
+      background: linear-gradient(135deg,#7c3aed,#2563eb);
+      transition: all 0.2s;
+    }
+    .btn-gradient:hover {
+      background: linear-gradient(135deg,#6d28d9,#1d4ed8);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(124,58,237,0.35);
+    }
+    .btn-gradient:active { transform: translateY(0); }
 
-/* ---------- 진행률 ---------- */
-
-.progress-section {
-    margin-bottom: 1.25rem;
-}
-
-.progress-bar {
-    background: #ececec;
-    border-radius: 4px;
-    height: 8px;
-    overflow: hidden;
-}
-
-.progress-bar-fill {
-    background: #4caf50;
-    height: 100%;
-    width: 0%;
-    transition: width 0.2s ease;
-}
-
-.progress-text {
-    margin: 0.5rem 0 0;
-    font-size: 0.85rem;
-    color: #666;
-}
-
-/* ---------- 입력 / 필터 / 공통 폼 ---------- */
-
-input[type="text"],
-select,
-button {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.95rem;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    background: #fff;
-    font-family: inherit;
-}
-
-button {
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-button:hover {
-    background: #f0f0f0;
-}
-
-.input-section {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
-
-.input-section input[type="text"] {
-    flex: 1;
-    min-width: 0;
-}
-
-.auto-hint {
-    flex: 1 1 100%;
-    margin: 0;
-    font-size: 0.8rem;
-    color: #2196f3;
-}
-
-#add-button {
-    background: #2196f3;
-    color: #fff;
-    border-color: #2196f3;
-}
-
-#add-button:hover {
-    background: #1976d2;
-    border-color: #1976d2;
-}
-
-.filter-section {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
-
-.filter-button.active {
-    background: #2196f3;
-    border-color: #2196f3;
-    color: #fff;
-}
-
-.filter-button.active:hover {
-    background: #1976d2;
-    border-color: #1976d2;
-}
-
-/* ---------- 할 일 목록 ---------- */
-
-#todo-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-/* 기본 todo-item: 세로 방향(column)으로 변경하여 AI 플랜 섹션을 하단에 배치 */
-.todo-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    padding: 0.6rem 0.25rem;
-    border-bottom: 1px solid #eee;
-}
-
-.todo-item:last-child {
-    border-bottom: none;
-}
-
-/* 체크박스/라벨/텍스트/버튼을 하나의 가로 행으로 묶는 컨테이너 */
-.todo-main-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-}
-
-/* 편집 모드에서는 기존 가로 레이아웃 복원 */
-.todo-item.editing {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-}
-
-.category-label {
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    white-space: nowrap;
-}
-
-.category-work {
-    background: #e3f2fd;
-    color: #1565c0;
-}
-
-.category-personal {
-    background: #e8f5e9;
-    color: #2e7d32;
-}
-
-.category-study {
-    background: #fff3e0;
-    color: #e65100;
-}
-
-.todo-text {
-    flex: 1;
-    word-break: break-word;
-    min-width: 0;
-}
-
-.todo-text.completed {
-    text-decoration: line-through;
-    color: #aaa;
-}
-
-.delete-button:hover {
-    background: #ffebee;
-    border-color: #f44336;
-    color: #f44336;
-}
-
-.edit-button:hover {
-    background: #e3f2fd;
-    border-color: #2196f3;
-    color: #1976d2;
-}
-
-/* ---------- AI 플랜 버튼 ---------- */
-
-.ai-plan-button {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: #fff;
-    border: none;
-    white-space: nowrap;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.65rem;
-    border-radius: 6px;
-    transition: opacity 0.15s ease, transform 0.1s ease;
-}
-
-.ai-plan-button:hover {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    opacity: 0.88;
-    transform: translateY(-1px);
-}
-
-.ai-plan-button:active {
-    transform: translateY(0);
-}
-
-/* ---------- AI 플랜 섹션 ---------- */
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-.ai-plan-section {
-    background: linear-gradient(135deg, #f8f4ff, #f0f4ff);
-    border: 1px solid #e0d9ff;
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    animation: fadeIn 0.25s ease forwards;
-    width: 100%;
-}
-
-/* AI 플랜 헤더: 카테고리 태그 + 요약 */
-.ai-plan-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.65rem;
-    flex-wrap: wrap;
-}
-
-.ai-category-tag {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: #fff;
-    font-size: 0.72rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    white-space: nowrap;
-    font-weight: 600;
-}
-
-.ai-summary {
-    font-size: 0.82rem;
-    color: #5a4e72;
-    font-style: italic;
-    flex: 1;
-    min-width: 0;
-    word-break: break-word;
-}
-
-/* AI 플랜 체크리스트 */
-.ai-steps-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-}
-
-.ai-step-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-}
-
-.ai-step-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.3rem;
-    height: 1.3rem;
-    min-width: 1.3rem;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: #fff;
-    font-size: 0.68rem;
-    font-weight: 700;
-    border-radius: 50%;
-    margin-top: 0.05rem;
-}
-
-.ai-step-text {
-    font-size: 0.83rem;
-    color: #3d3050;
-    flex: 1;
-    word-break: break-word;
-    line-height: 1.4;
-}
-
-.ai-step-text.step-done {
-    text-decoration: line-through;
-    color: #a89dc0;
-}
-
-.ai-step-checkbox {
-    margin-top: 0.1rem;
-    accent-color: #764ba2;
-    width: 0.95rem;
-    height: 0.95rem;
-    flex-shrink: 0;
-    cursor: pointer;
-}
-
-/* ---------- 인라인 편집 ---------- */
-
-.edit-input {
-    flex: 1;
-    min-width: 0;
-}
-
-/* ---------- 빈 상태 ---------- */
-
-.empty-state {
-    text-align: center;
-    color: #999;
-    padding: 2rem 1rem;
-    font-size: 0.95rem;
-    border-bottom: none;
-}
-
-/* ---------- AI 로딩 오버레이 ---------- */
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-#ai-loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1.1rem;
-    z-index: 9999;
-}
-#ai-loading-overlay[hidden] {
-    display: none;
-}
-
-#ai-loading-overlay .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid rgba(255, 255, 255, 0.25);
-    border-top-color: #2196f3;
-    border-radius: 50%;
-    animation: spin 0.75s linear infinite;
-}
-
-#ai-loading-overlay .loading-text {
-    color: #fff;
-    font-size: 0.95rem;
-    font-weight: 500;
-    text-align: center;
-    max-width: 280px;
-    line-height: 1.5;
-    letter-spacing: 0.01em;
-}
-
-/* ---------- 반응형 (<=480px) ---------- */
-
-@media (max-width: 480px) {
-    body {
-        padding: 1rem 0.5rem;
+    /* 사이드바 아이템 */
+    .sidebar-item {
+      border-left: 2px solid transparent;
+      transition: background 0.15s;
+    }
+    .sidebar-item:hover  { background: rgba(255,255,255,0.04); }
+    .sidebar-item.is-active {
+      background: rgba(124,58,237,0.12);
+      border-left-color: #7c3aed;
     }
 
-    .app {
-        padding: 1rem;
-        border-radius: 8px;
+    /* 입력 필드 오류 강조 */
+    .input-error {
+      outline: 2px solid #ef4444 !important;
+      outline-offset: 0 !important;
     }
 
-    .app-header h1 {
-        font-size: 1.2rem;
-    }
+    /* 진행률 바 트랜지션 */
+    .progress-fill { transition: width 0.35s ease; }
 
-    .input-section input[type="text"] {
-        flex: 1 1 100%;
-    }
+    /* 체크박스 accent */
+    input[type="checkbox"] { accent-color: #7c3aed; }
 
-    .input-section select,
-    .input-section #add-button {
-        flex: 1;
+    /* 결과 카드 step 완료 취소선 */
+    .step-done {
+      text-decoration: line-through;
+      opacity: 0.45;
     }
-
-    .filter-button {
-        flex: 1 1 calc(50% - 0.25rem);
-        text-align: center;
-    }
-
-    /* 모바일에서도 todo-item은 column 유지, main-row 내부 줄바꿈 허용 */
-    .todo-main-row {
-        flex-wrap: wrap;
-    }
-
-    .todo-text {
-        flex: 1 1 100%;
-        order: 10;
-    }
-
-    .ai-plan-button {
-        order: 11;
-    }
-}
-    </style>
+  </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
 
-    <!-- AI 로딩 오버레이: 기본 hidden, generateAIPlan 중에만 표시 -->
-    <div id="ai-loading-overlay" hidden aria-live="assertive" role="status" aria-label="AI 실행 계획 생성 중">
-        <div class="spinner" aria-hidden="true"></div>
-        <p class="loading-text">AI가 프로젝트 실행 계획을 보안 채널을 통해 생성 중입니다...</p>
+  <!-- ────────────────────────────────────────────────
+       로딩 오버레이 (기본 hidden)
+  ──────────────────────────────────────────────── -->
+  <div
+    id="loading-overlay"
+    hidden
+    role="status"
+    aria-live="assertive"
+    aria-label="로드맵 연산 중"
+    class="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6"
+    style="background:rgba(2,6,23,0.92); backdrop-filter:blur(8px);"
+  >
+    <!-- 이중 스피너 -->
+    <div class="relative w-20 h-20 flex items-center justify-center" aria-hidden="true">
+      <!-- 바깥 링: 보라색 -->
+      <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-500 spinner"></div>
+      <!-- 안쪽 링: 파란색 역방향 -->
+      <div class="absolute inset-3 rounded-full border-4 border-transparent border-t-blue-500 spinner-reverse"></div>
+      <!-- 중앙 점 -->
+      <div class="w-2 h-2 rounded-full bg-purple-400" style="animation:dotPulse 1.2s ease-in-out infinite;"></div>
     </div>
 
-    <div class="app">
-        <header class="app-header">
-            <h1>📋 나의 할 일</h1>
-        </header>
+    <p class="text-slate-300 text-sm text-center max-w-xs leading-relaxed px-4">
+      알고리즘 매트릭스를 기반으로<br>최적의 로드맵을 연산 중입니다...
+    </p>
+  </div>
 
-        <section class="progress-section">
-            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                <div class="progress-bar-fill" id="progress-bar-fill"></div>
+  <!-- ────────────────────────────────────────────────
+       앱 레이아웃: 사이드바 + 메인
+  ──────────────────────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden" style="height:100vh;">
+
+    <!-- ── 사이드바 ── -->
+    <aside
+      id="sidebar"
+      class="w-64 flex-shrink-0 bg-slate-900 border-r border-slate-700/50 flex flex-col overflow-hidden"
+      aria-label="저장된 로드맵 목록"
+    >
+      <!-- 사이드바 헤더 -->
+      <div class="px-4 pt-5 pb-3 border-b border-slate-700/50">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded bg-purple-600/30 flex items-center justify-center flex-shrink-0">
+            <svg class="w-3.5 h-3.5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <span class="text-xs font-semibold text-slate-400 tracking-widest uppercase">로드맵 아카이브</span>
+        </div>
+      </div>
+
+      <!-- 사이드바 목록 -->
+      <ul
+        id="sidebar-list"
+        class="flex-1 overflow-y-auto no-scrollbar py-2"
+        role="list"
+        aria-label="저장된 로드맵"
+      >
+        <!-- JS로 채워짐 -->
+      </ul>
+
+      <!-- 사이드바 푸터: 저장 개수 -->
+      <div class="px-4 py-3 border-t border-slate-700/50">
+        <p id="sidebar-count" class="text-xs text-slate-500" aria-live="polite">0개 저장됨</p>
+      </div>
+    </aside>
+
+    <!-- ── 메인 영역 ── -->
+    <main class="flex-1 overflow-y-auto no-scrollbar bg-slate-950 p-6 md:p-8" aria-label="로드맵 생성 영역">
+
+      <!-- 페이지 헤더 -->
+      <header class="mb-8">
+        <div class="flex items-center gap-3 mb-1">
+          <!-- 그라데이션 아이콘 -->
+          <div
+            class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+            style="background:linear-gradient(135deg,#7c3aed,#2563eb);"
+            aria-hidden="true"
+          >
+            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <h1 class="text-xl font-bold text-slate-100 tracking-tight">스마트 로드맵 엔진</h1>
+        </div>
+        <p class="text-xs text-slate-500 pl-12">
+          MatrixEngine 알고리즘이 카테고리를 분석하고 최적의 5단계 실행 계획을 즉시 생성합니다.
+        </p>
+      </header>
+
+      <!-- 입력 카드 -->
+      <section aria-labelledby="input-section-title">
+        <h2 id="input-section-title" class="sr-only">로드맵 생성 입력</h2>
+        <div class="bg-slate-900 border border-slate-700/50 rounded-xl p-5 mb-6">
+          <div class="flex flex-col gap-4">
+
+            <!-- 프로젝트 제목 -->
+            <div>
+              <label for="title-input" class="block text-xs font-medium text-slate-400 mb-1.5">
+                프로젝트 제목
+              </label>
+              <input
+                id="title-input"
+                type="text"
+                placeholder="예: 개인 포트폴리오 웹사이트 제작"
+                maxlength="100"
+                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-100
+                       placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/40
+                       transition-colors"
+                aria-required="true"
+                aria-describedby="title-error"
+              >
+              <p id="title-error" class="text-xs text-red-400 mt-1 hidden" role="alert">제목을 입력해 주세요.</p>
             </div>
-            <p class="progress-text" id="progress-text">0 / 0 완료 (0%)</p>
-        </section>
 
-        <section class="input-section">
-            <input type="text" id="todo-input" placeholder="할 일을 입력하세요" aria-label="새 할 일 입력">
-            <select id="category-select" aria-label="카테고리 선택">
-                <option value="auto">자동</option>
-                <option value="work">업무</option>
-                <option value="personal">개인</option>
-                <option value="study">공부</option>
-            </select>
-            <button type="button" id="add-button">추가</button>
-            <p class="auto-hint" id="auto-hint" hidden aria-live="polite"></p>
-        </section>
+            <!-- 카테고리 선택 -->
+            <div>
+              <label for="category-select" class="block text-xs font-medium text-slate-400 mb-1.5">
+                카테고리
+              </label>
+              <select
+                id="category-select"
+                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-slate-100
+                       focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/40
+                       transition-colors appearance-none cursor-pointer"
+                aria-label="프로젝트 카테고리 선택"
+              >
+                <option value="IT/개발">IT / 개발</option>
+                <option value="자산관리">자산관리</option>
+                <option value="루틴/헬스">루틴 / 헬스</option>
+                <option value="마케팅">마케팅</option>
+              </select>
+            </div>
 
-        <section class="filter-section" aria-label="카테고리 필터">
-            <button type="button" class="filter-button" data-filter="all">전체</button>
-            <button type="button" class="filter-button" data-filter="work">업무</button>
-            <button type="button" class="filter-button" data-filter="personal">개인</button>
-            <button type="button" class="filter-button" data-filter="study">공부</button>
-        </section>
+            <!-- 생성 버튼 -->
+            <button
+              id="generate-btn"
+              type="button"
+              class="btn-gradient w-full rounded-lg py-2.5 text-sm font-semibold text-white flex items-center justify-center gap-2"
+              aria-label="스마트 로드맵 생성"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>
+              스마트 로드맵 생성
+            </button>
+          </div>
+        </div>
+      </section>
 
-        <section class="list-section">
-            <ul id="todo-list" aria-label="할 일 목록"></ul>
-        </section>
+      <!-- 결과 카드 (조건부 표시) -->
+      <section id="result-section" hidden aria-labelledby="result-title" aria-live="polite">
+        <div id="result-card" class="bg-slate-900 border border-slate-700/50 rounded-xl p-5 fade-in">
+          <!-- JS로 채워짐 -->
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ────────────────────────────────────────────────
+       MatrixEngine (인라인)
+  ──────────────────────────────────────────────── -->
+  <script>
+const MatrixEngine = {
+    templates: {
+        "IT/개발": {
+            summary: "성공적인 서비스 런칭을 위한 아키텍처 설계 및 에이전트 협업 개발 로드맵",
+            steps: ["요구사항 정의 및 기획서(PRD) 작성하기","UI/UX 와이어프레임 설계 및 컴포넌트 뼈대 구축하기","핵심 비즈니스 로직 및 로컬 데이터 파이프라인 연동하기","QA 에이전트 시나리오 기반 예외 처리 및 통합 테스트 진행하기","Vercel 플랫폼을 활용한 프로덕션 빌드 및 최종 배포하기"]
+        },
+        "자산관리": {
+            summary: "안정적인 자산 증식과 포트폴리오 최적화를 위한 자본 배분 가이드라인",
+            steps: ["현재 총 자산 및 유동 자산 규모 정확히 측정하기","안전 자산(예금/채권)과 위험 자산(주식/ETF) 최적 비중 설정하기","월 현금흐름(이자 및 배당 수입) 극대화를 위한 종목 스크리닝하기","세금 혜택 및 연말정산 공제 상품 연계안 검토하기","정기적인 리밸런싱 주기 설정 및 모니터링 대시보드 구축하기"]
+        },
+        "루틴/헬스": {
+            summary: "지속 가능한 신체 기능 발달 및 완벽한 피지컬 컨디셔닝을 위한 계획",
+            steps: ["현재 인바디 데이터 측정 및 명확한 근골격량/체지방률 목표 설정하기","부위별 분할 운동 프로그램 및 주간 루틴 스케줄링하기","기초대사량 기준 탄단지(탄수화물/단백질/지방) 매크로 식단 설계하기","운동 수행 능력 점검 및 세트별 중량 점진적 과부하 기록하기","충분한 휴식 및 컨디션 회복을 위한 서플리먼트 타이밍 배치하기"]
+        },
+        "마케팅": {
+            summary: "타겟 고객 유입 및 브랜드 인지도 극대화를 위한 그로스해킹 캠페인",
+            steps: ["시장 조사 및 핵심 페르소나(Target Customer) 정의하기","캠페인 핵심 메시지 슬로건 및 크리에이티브 콘텐츠 제작하기","소셜 미디어 및 광고 매체별 예산 배분 및 미디어믹스 짜기","전환율(CVR) 추적을 위한 데이터 분석 픽셀 및 링크 심기","초기 성과 지표(KPI) 모니터링 후 광고 효율 최적화 피드백 반영하기"]
+        }
+    },
+    generateLocalPlan(title, category) {
+        const template = this.templates[category] || this.templates["IT/개발"];
+        return {
+            category,
+            summary: `[${title}] 프로젝트 수립 완료: ${template.summary}`,
+            action_steps: template.steps.map((task, i) => ({ step: i+1, task: `[${title}] ${task}`, completed: false }))
+        };
+    }
+};
+window.MatrixEngine = MatrixEngine;
+  </script>
+
+  <!-- ────────────────────────────────────────────────
+       앱 로직
+  ──────────────────────────────────────────────── -->
+  <script>
+// ============================================================
+// AI 스마트 로드맵 엔진 — 메인 앱 스크립트
+// LocalStorage 기반, 외부 API 없이 100% 로컬 동작
+// ============================================================
+
+const STORAGE_KEY = 'roadmap_plans';
+
+// ── 카테고리 배지 스타일 매핑 ──
+const BADGE_STYLES = {
+  'IT/개발':   'bg-blue-500/20 text-blue-300 border border-blue-500/30',
+  '자산관리':  'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+  '루틴/헬스': 'bg-orange-500/20 text-orange-300 border border-orange-500/30',
+  '마케팅':    'bg-pink-500/20 text-pink-300 border border-pink-500/30',
+};
+
+// ── XSS 방지: 사용자 입력은 반드시 이 함수로 이스케이프 ──
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── LocalStorage 헬퍼 ──
+function loadPlans() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePlans(plans) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(plans));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      showToast('저장 공간이 부족합니다. 오래된 로드맵을 삭제해 주세요.');
+    }
+  }
+}
+
+// ── 현재 화면에 표시된 plan의 ID ──
+let currentPlanId = null;
+
+// ────────────────────────────────────────────────
+// 사이드바 렌더링
+// ────────────────────────────────────────────────
+function renderSidebar() {
+  const plans = loadPlans();
+  const listEl = document.getElementById('sidebar-list');
+  const countEl = document.getElementById('sidebar-count');
+
+  countEl.textContent = `${plans.length}개 저장됨`;
+  listEl.innerHTML = '';
+
+  if (plans.length === 0) {
+    // Empty state
+    const empty = document.createElement('li');
+    empty.className = 'px-4 py-8 text-center';
+    empty.innerHTML = `
+      <div class="flex flex-col items-center gap-2">
+        <svg class="w-8 h-8 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h4a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        </svg>
+        <p class="text-xs text-slate-600">저장된 로드맵 없음</p>
+      </div>
+    `;
+    listEl.appendChild(empty);
+    return;
+  }
+
+  // 최신순 정렬 (createdAt DESC)
+  const sorted = [...plans].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  for (const plan of sorted) {
+    const li = buildSidebarItem(plan);
+    listEl.appendChild(li);
+  }
+}
+
+function buildSidebarItem(plan) {
+  const isActive = plan.id === currentPlanId;
+  const total    = plan.action_steps.length;
+  const done     = plan.action_steps.filter(s => s.completed).length;
+  const pct      = total === 0 ? 0 : Math.round((done / total) * 100);
+
+  const li = document.createElement('li');
+  li.className = `sidebar-item group relative px-3.5 py-3 cursor-pointer${isActive ? ' is-active' : ''}`;
+  li.setAttribute('role', 'button');
+  li.setAttribute('tabindex', '0');
+  li.setAttribute('aria-label', `${escapeHtml(plan.title)} 로드맵 보기`);
+  li.dataset.planId = plan.id;
+
+  li.innerHTML = `
+    <div class="flex items-start justify-between gap-1 min-w-0">
+      <span class="text-xs font-medium text-slate-200 truncate flex-1 min-w-0 leading-snug">
+        ${escapeHtml(plan.title)}
+      </span>
+      <!-- 삭제 버튼: hover 시에만 표시 -->
+      <button
+        class="delete-btn flex-shrink-0 w-4 h-4 rounded flex items-center justify-center
+               opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-red-400"
+        data-plan-id="${escapeHtml(plan.id)}"
+        aria-label="${escapeHtml(plan.title)} 삭제"
+        tabindex="-1"
+        type="button"
+      >
+        <svg class="w-3 h-3 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
     </div>
 
-    <script>
-// ============================================================
-// app.js — 할 일 관리 앱: 데이터 / 렌더링 / 이벤트 / 초기화
-// AI 플랜 생성, 체크리스트 저장 로직 포함
-// ============================================================
+    <!-- 카테고리 배지 -->
+    <span class="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded-full border ${BADGE_STYLES[plan.category] || 'bg-slate-700 text-slate-400 border-slate-600'}">
+      ${escapeHtml(plan.category)}
+    </span>
 
-// ---------- 상수 & 상태 ----------
+    <!-- 진행률 바 -->
+    <div class="mt-2">
+      <div class="h-1 bg-slate-700 rounded-full overflow-hidden" role="progressbar"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"
+           aria-label="${escapeHtml(plan.title)} 진행률 ${done}/${total}">
+        <div class="h-full rounded-full progress-fill"
+             style="width:${pct}%; background:linear-gradient(90deg,#7c3aed,#2563eb);"></div>
+      </div>
+      <p class="text-[10px] text-slate-500 mt-0.5">${done} / ${total}</p>
+    </div>
+  `;
 
-const STORAGE_KEY = "todos";
+  // 클릭: 로드맵 로드
+  li.addEventListener('click', (e) => {
+    // 삭제 버튼 클릭이면 무시 (이벤트 위임으로 처리됨)
+    if (e.target.closest('.delete-btn')) return;
+    loadAndShowPlan(plan.id);
+  });
 
-const CATEGORY_LABELS = {
-    work: "업무",
-    personal: "개인",
-    study: "공부",
-};
-
-// 자동 분류용 키워드 — 텍스트에 포함된 키워드 수가 가장 많은 카테고리로 분류한다.
-const CATEGORY_KEYWORDS = {
-    work: [
-        "회의", "미팅", "보고서", "보고", "이메일", "메일", "발표", "프로젝트",
-        "클라이언트", "고객", "업무", "출장", "결재", "기획", "마감", "회사",
-        "팀", "거래처", "계약",
-    ],
-    study: [
-        "공부", "강의", "수업", "시험", "과제", "숙제", "학습", "독서", "책",
-        "영어", "수학", "국어", "인강", "복습", "예습", "학원", "자격증",
-        "토익", "토플", "코딩", "논문",
-    ],
-    personal: [
-        "운동", "헬스", "요가", "산책", "조깅", "쇼핑", "장보기", "약속", "친구",
-        "가족", "영화", "여행", "식사", "점심", "저녁", "아침", "병원", "청소",
-        "빨래", "은행", "미용실",
-    ],
-};
-
-// 자동 분류에서 매칭이 전혀 없을 때 사용할 기본 카테고리.
-const AUTO_FALLBACK_CATEGORY = "personal";
-
-let currentFilter = "all";
-
-// DOM 참조 — DOMContentLoaded에서 채워진다.
-let todoListEl;
-let todoInputEl;
-let categorySelectEl;
-let addButtonEl;
-let progressBarFillEl;
-let progressTextEl;
-let filterButtonEls;
-let autoHintEl;
-let aiLoadingOverlayEl;
-
-// ---------- 자동 카테고리 분류 ----------
-
-// 텍스트를 카테고리별 키워드와 매칭해 가장 점수가 높은 카테고리를 반환한다.
-// 매칭이 없으면 AUTO_FALLBACK_CATEGORY를 반환한다.
-function classifyByKeywords(text) {
-    if (!text) return AUTO_FALLBACK_CATEGORY;
-    const lower = text.toLowerCase();
-    let best = AUTO_FALLBACK_CATEGORY;
-    let bestScore = 0;
-    for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        let score = 0;
-        for (const kw of keywords) {
-            if (lower.includes(kw.toLowerCase())) score++;
-        }
-        if (score > bestScore) {
-            bestScore = score;
-            best = category;
-        }
+  // 키보드 접근성
+  li.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      loadAndShowPlan(plan.id);
     }
-    return best;
+  });
+
+  // 삭제 버튼
+  const deleteBtn = li.querySelector('.delete-btn');
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deletePlan(plan.id);
+  });
+
+  return li;
 }
 
-// 셀렉트가 "auto"면 키워드 분류 결과로 치환, 아니면 원래 값 그대로 사용한다.
-function resolveCategory(selectValue, text) {
-    return selectValue === "auto" ? classifyByKeywords(text) : selectValue;
+// ────────────────────────────────────────────────
+// 결과 카드 렌더링
+// ────────────────────────────────────────────────
+function renderResultCard(plan) {
+  const section  = document.getElementById('result-section');
+  const cardEl   = document.getElementById('result-card');
+  const badgeCls = BADGE_STYLES[plan.category] || 'bg-slate-700 text-slate-400 border-slate-600';
+
+  // fade-in 재시작을 위해 클래스 잠시 제거 후 재추가
+  cardEl.classList.remove('fade-in');
+  void cardEl.offsetWidth; // reflow
+  cardEl.classList.add('fade-in');
+
+  // 완료된 step 수 계산
+  const total = plan.action_steps.length;
+  const done  = plan.action_steps.filter(s => s.completed).length;
+  const pct   = total === 0 ? 0 : Math.round((done / total) * 100);
+
+  // 헤더 HTML (XSS 안전 처리)
+  cardEl.innerHTML = `
+    <!-- 카드 헤더 -->
+    <div class="flex items-start justify-between gap-3 mb-4">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+          <span class="inline-block text-xs px-2 py-0.5 rounded-full border font-medium ${badgeCls}">
+            ${escapeHtml(plan.category)}
+          </span>
+        </div>
+        <h2 id="result-title" class="text-sm font-semibold text-slate-100 leading-snug">
+          ${escapeHtml(plan.title)}
+        </h2>
+        <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+          ${escapeHtml(plan.summary)}
+        </p>
+      </div>
+    </div>
+
+    <!-- 진행률 -->
+    <div class="mb-5">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-[11px] font-medium text-slate-400">실행 진행률</span>
+        <span class="text-[11px] text-slate-400">${done} / ${total} 완료</span>
+      </div>
+      <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden"
+           role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"
+           aria-label="실행 계획 진행률">
+        <div id="result-progress-bar" class="h-full rounded-full progress-fill"
+             style="width:${pct}%; background:linear-gradient(90deg,#7c3aed,#2563eb);"></div>
+      </div>
+    </div>
+
+    <!-- 구분선 -->
+    <hr class="border-slate-700/60 mb-4">
+
+    <!-- 단계 체크리스트 -->
+    <ul id="steps-list" class="flex flex-col gap-2.5" role="list" aria-label="실행 단계 목록">
+      <!-- JS로 채워짐 -->
+    </ul>
+  `;
+
+  // step 아이템 렌더링
+  const stepsList = cardEl.querySelector('#steps-list');
+  for (let i = 0; i < plan.action_steps.length; i++) {
+    stepsList.appendChild(buildStepItem(plan, i));
+  }
+
+  // 결과 섹션 표시
+  section.hidden = false;
 }
 
-// ---------- 데이터 계층 ----------
+function buildStepItem(plan, idx) {
+  const step      = plan.action_steps[idx];
+  const isDone    = step.completed;
+  const li        = document.createElement('li');
+  li.className    = 'flex items-start gap-3 group';
+  li.dataset.stepIdx = idx;
 
-// localStorage에서 할 일 배열을 불러온다 (없으면 빈 배열 반환).
-function loadTodos() {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return [];
-        return JSON.parse(raw);
-    } catch {
-        return [];
-    }
-}
+  li.innerHTML = `
+    <!-- 번호 배지 -->
+    <div class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white mt-0.5"
+         style="background:linear-gradient(135deg,#7c3aed,#2563eb);" aria-hidden="true">
+      ${step.step}
+    </div>
 
-// 주어진 배열을 localStorage에 JSON으로 저장한다.
-// 저장 용량 초과 시 사용자에게 안내한다.
-function saveTodos(todos) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-    } catch (e) {
-        if (e.name === "QuotaExceededError") {
-            alert("저장 공간이 부족합니다. 완료된 할 일을 일부 삭제해 주세요.");
-        }
-    }
-}
+    <!-- 텍스트 -->
+    <span class="flex-1 text-sm text-slate-300 leading-relaxed step-text${isDone ? ' step-done' : ''}">
+      ${escapeHtml(step.task)}
+    </span>
 
-// 새 할 일을 만들어 배열 끝에 추가하고 저장한다.
-function addTodo(text, category) {
-    const todos = loadTodos();
-    const todo = {
-        id: Date.now().toString(),
-        text,
-        category,
-        completed: false,
-        createdAt: new Date().toISOString(),
-        // aiPlan 필드는 AI 플랜 생성 후 saveAIPlan()에서 추가된다.
+    <!-- 체크박스 -->
+    <input
+      type="checkbox"
+      ${isDone ? 'checked' : ''}
+      class="flex-shrink-0 mt-1 w-4 h-4 cursor-pointer rounded"
+      aria-label="단계 ${step.step} 완료 여부"
+    >
+  `;
+
+  // 체크박스 이벤트 (클로저로 idx 캡처)
+  const cb = li.querySelector('input[type="checkbox"]');
+  cb.addEventListener('change', (function(capturedIdx) {
+    return function() {
+      toggleStep(plan.id, capturedIdx);
     };
-    todos.push(todo);
-    saveTodos(todos);
-    return todo;
+  })(idx));
+
+  return li;
 }
 
-// id로 찾은 할 일의 텍스트와 카테고리를 갱신한다.
-function updateTodo(id, newText, newCategory) {
-    const todos = loadTodos();
-    const todo = todos.find((t) => t.id === id);
-    if (!todo) return null;
-    todo.text = newText;
-    todo.category = newCategory;
-    saveTodos(todos);
-    return todo;
-}
+// ────────────────────────────────────────────────
+// 핵심 로직: 생성 / 토글 / 삭제 / 로드
+// ────────────────────────────────────────────────
 
-// id에 해당하는 할 일을 배열에서 제거한다.
-function deleteTodo(id) {
-    const todos = loadTodos();
-    const next = todos.filter((t) => t.id !== id);
-    saveTodos(next);
-}
+function handleGenerate() {
+  const titleInput = document.getElementById('title-input');
+  const categorySelect = document.getElementById('category-select');
+  const titleError = document.getElementById('title-error');
+  const title    = titleInput.value.trim();
+  const category = categorySelect.value;
 
-// id에 해당하는 할 일의 완료 여부를 뒤집는다.
-function toggleTodo(id) {
-    const todos = loadTodos();
-    const todo = todos.find((t) => t.id === id);
-    if (!todo) return null;
-    todo.completed = !todo.completed;
-    saveTodos(todos);
-    return todo;
-}
-
-// AI 플랜 결과를 특정 할 일에 저장한다.
-function saveAIPlan(todoId, aiPlan) {
-    const todos = loadTodos();
-    const todo = todos.find((t) => t.id === todoId);
-    if (!todo) return;
-    todo.aiPlan = aiPlan;
-    saveTodos(todos);
-}
-
-// 특정 할 일의 AI 플랜 내 step 완료 여부를 토글하고 DOM을 직접 갱신한다.
-// 전체 re-render 없이 해당 텍스트 요소에만 취소선을 적용한다.
-function toggleStep(todoId, stepIndex) {
-    const todos = loadTodos();
-    const todo = todos.find((t) => t.id === todoId);
-    if (!todo || !todo.aiPlan) return;
-
-    const step = todo.aiPlan.action_steps[stepIndex];
-    if (!step) return;
-    step.completed = !step.completed;
-    saveTodos(todos);
-
-    // DOM 직접 조작: 해당 step 텍스트에 취소선 스타일만 토글
-    const stepTextEl = document.querySelector(
-        `[data-todo-id="${todoId}"] [data-step-index="${stepIndex}"] .ai-step-text`
-    );
-    if (stepTextEl) {
-        stepTextEl.classList.toggle("step-done", step.completed);
-    }
-}
-
-// ---------- AI 플랜 생성 ----------
-
-// 로딩 오버레이 표시 / 숨김 헬퍼
-function showLoadingOverlay() {
-    aiLoadingOverlayEl.hidden = false;
-}
-function hideLoadingOverlay() {
-    aiLoadingOverlayEl.hidden = true;
-}
-
-// AI 플랜 생성 비동기 함수
-// POST /api/generate 로 idea 텍스트를 전송하고 응답을 LocalStorage에 저장한다.
-async function generateAIPlan(todoId) {
-    const todos = loadTodos();
-    const todo = todos.find((t) => t.id === todoId);
-    if (!todo) {
-        console.warn("[AI플랜] ❌ todo를 찾을 수 없음:", todoId);
-        return;
-    }
-
-    console.log("[AI플랜] ▶ 시작", { id: todoId, text: todo.text });
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-        console.error("[AI플랜] ⏱ 타임아웃 — 30초 초과로 요청 중단");
-    }, 30000);
-
-    try {
-        showLoadingOverlay();
-        console.log("[AI플랜] 🔒 로딩 오버레이 표시됨");
-        console.log("[AI플랜] 📡 POST /api/generate 요청 전송...");
-
-        const response = await fetch("/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idea: todo.text }),
-            signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-        console.log("[AI플랜] 📥 응답 수신:", response.status, response.statusText);
-
-        if (!response.ok) {
-            const errBody = await response.text().catch(() => "(본문 없음)");
-            console.error("[AI플랜] ❌ 서버 오류 응답 본문:", errBody);
-            throw new Error(`서버 오류 ${response.status} — ${errBody.slice(0, 200)}`);
-        }
-
-        const result = await response.json();
-        console.log("[AI플랜] ✅ 응답 JSON:", result);
-
-        const normalizedPlan = {
-            category: result.category || "기타",
-            summary: result.summary || "",
-            action_steps: (result.action_steps || []).map((s, i) => ({
-                step: s.step ?? i + 1,
-                task: s.task ?? "",
-                completed: false,
-            })),
-        };
-
-        console.log("[AI플랜] 💾 저장할 플랜:", normalizedPlan);
-        saveAIPlan(todoId, normalizedPlan);
-        renderTodos();
-        console.log("[AI플랜] ✔ 렌더링 완료");
-
-    } catch (err) {
-        clearTimeout(timeoutId);
-        if (err.name === "AbortError") {
-            console.error("[AI플랜] ⏱ AbortError — 요청이 타임아웃으로 중단됨");
-            alert("AI 플랜 생성이 시간 초과됐습니다.\n잠시 후 다시 시도해 주세요.");
-        } else {
-            console.error("[AI플랜] ❌ 오류 종류:", err.name);
-            console.error("[AI플랜] ❌ 오류 메시지:", err.message);
-            console.error("[AI플랜] ❌ 스택:", err.stack);
-            alert(`AI 플랜 생성에 실패했습니다.\n\n${err.message}`);
-        }
-    } finally {
-        clearTimeout(timeoutId);
-        hideLoadingOverlay();
-        console.log("[AI플랜] 🔓 로딩 오버레이 닫힘");
-    }
-}
-
-// ---------- 렌더링 ----------
-
-// 현재 필터에 맞는 항목을 ul에 그리고, 빈 상태 안내와 진행률을 갱신한다.
-function renderTodos() {
-    const all = loadTodos();
-    const visible = currentFilter === "all"
-        ? all
-        : all.filter((t) => t.category === currentFilter);
-
-    todoListEl.innerHTML = "";
-
-    if (all.length === 0) {
-        const empty = document.createElement("li");
-        empty.className = "empty-state";
-        empty.textContent = "아직 할 일이 없어요. 위에서 추가해보세요!";
-        todoListEl.appendChild(empty);
-    } else {
-        for (const todo of visible) {
-            todoListEl.appendChild(buildTodoItem(todo));
-        }
-    }
-
-    updateProgress();
-}
-
-// 단일 할 일에 대한 li 요소를 만든다.
-// 구조: li.todo-item > .todo-main-row (기존 요소들 + AI 플랜 버튼) + .ai-plan-section (조건부)
-function buildTodoItem(todo) {
-    const li = document.createElement("li");
-    li.className = "todo-item";
-    li.dataset.id = todo.id;
-    // toggleStep에서 data-todo-id로 해당 아이템을 찾기 위해 설정
-    li.dataset.todoId = todo.id;
-
-    // --- .todo-main-row: 기존 요소들을 가로 행으로 묶는 컨테이너 ---
-    const mainRow = document.createElement("div");
-    mainRow.className = "todo-main-row";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = todo.completed;
-    checkbox.setAttribute("aria-label", `${todo.text} 완료 여부`);
-    checkbox.addEventListener("change", () => {
-        toggleTodo(todo.id);
-        renderTodos();
+  // 유효성 검사
+  if (!title) {
+    titleInput.classList.add('input-error');
+    titleError.classList.remove('hidden');
+    titleInput.focus();
+    // 입력 시 오류 상태 해제
+    titleInput.addEventListener('input', function clearError() {
+      titleInput.classList.remove('input-error');
+      titleError.classList.add('hidden');
+      titleInput.removeEventListener('input', clearError);
     });
+    return;
+  }
 
-    const categoryEl = document.createElement("span");
-    categoryEl.className = `category-label category-${todo.category}`;
-    categoryEl.textContent = CATEGORY_LABELS[todo.category] ?? todo.category;
+  // 오류 상태 클리어
+  titleInput.classList.remove('input-error');
+  titleError.classList.add('hidden');
 
-    const textEl = document.createElement("span");
-    textEl.className = "todo-text";
-    if (todo.completed) textEl.classList.add("completed");
-    textEl.textContent = todo.text;
+  // 로딩 오버레이 표시
+  const overlay = document.getElementById('loading-overlay');
+  overlay.hidden = false;
 
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "edit-button";
-    editBtn.textContent = "수정";
-    editBtn.setAttribute("aria-label", `${todo.text} 수정`);
-    editBtn.addEventListener("click", () => startEdit(li, todo));
+  // 500ms 후 결과 렌더링
+  setTimeout(() => {
+    // 오버레이 숨김
+    overlay.hidden = true;
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "delete-button";
-    deleteBtn.textContent = "삭제";
-    deleteBtn.setAttribute("aria-label", `${todo.text} 삭제`);
-    deleteBtn.addEventListener("click", () => {
-        deleteTodo(todo.id);
-        renderTodos();
-    });
+    // 플랜 생성
+    const plan = window.MatrixEngine.generateLocalPlan(title, category);
 
-    // AI 플랜 버튼: 기존 플랜이 있으면 "재생성", 없으면 "AI 플랜"
-    const aiPlanBtn = document.createElement("button");
-    aiPlanBtn.type = "button";
-    aiPlanBtn.className = "ai-plan-button";
-    aiPlanBtn.textContent = todo.aiPlan ? "🔄 재생성" : "✨ AI 플랜";
-    aiPlanBtn.setAttribute("aria-label", todo.aiPlan ? `${todo.text} AI 플랜 재생성` : `${todo.text} AI 플랜 생성`);
-    aiPlanBtn.addEventListener("click", () => generateAIPlan(todo.id));
-
-    mainRow.append(checkbox, categoryEl, textEl, editBtn, deleteBtn, aiPlanBtn);
-    li.appendChild(mainRow);
-
-    // AI 플랜 섹션: aiPlan이 있을 때만 렌더링
-    if (todo.aiPlan) {
-        li.appendChild(buildAIPlanSection(todo));
-    }
-
-    return li;
-}
-
-// AI 플랜 섹션 DOM 빌더
-function buildAIPlanSection(todo) {
-    const plan = todo.aiPlan;
-
-    const section = document.createElement("div");
-    section.className = "ai-plan-section";
-    section.setAttribute("aria-label", "AI 실행 계획");
-
-    // 헤더: AI 카테고리 태그 + 요약
-    const header = document.createElement("div");
-    header.className = "ai-plan-header";
-
-    const categoryTag = document.createElement("span");
-    categoryTag.className = "ai-category-tag";
-    categoryTag.textContent = plan.category;
-
-    const summary = document.createElement("span");
-    summary.className = "ai-summary";
-    summary.textContent = plan.summary;
-
-    header.append(categoryTag, summary);
-
-    // 체크리스트
-    const stepsList = document.createElement("ul");
-    stepsList.className = "ai-steps-list";
-    stepsList.setAttribute("role", "list");
-
-    for (let i = 0; i < plan.action_steps.length; i++) {
-        const stepData = plan.action_steps[i];
-        const stepItem = document.createElement("li");
-        stepItem.className = "ai-step-item";
-        // toggleStep에서 data-step-index로 해당 step을 찾기 위해 설정
-        stepItem.dataset.stepIndex = i;
-
-        const badge = document.createElement("span");
-        badge.className = "ai-step-badge";
-        badge.textContent = stepData.step;
-        badge.setAttribute("aria-hidden", "true");
-
-        const stepText = document.createElement("span");
-        stepText.className = "ai-step-text";
-        if (stepData.completed) stepText.classList.add("step-done");
-        stepText.textContent = stepData.task;
-
-        const stepCheckbox = document.createElement("input");
-        stepCheckbox.type = "checkbox";
-        stepCheckbox.className = "ai-step-checkbox";
-        stepCheckbox.checked = stepData.completed;
-        stepCheckbox.setAttribute("aria-label", `단계 ${stepData.step}: ${stepData.task}`);
-        // 클로저로 todoId와 stepIndex를 캡처
-        stepCheckbox.addEventListener("change", (function(tid, idx) {
-            return function() { toggleStep(tid, idx); };
-        })(todo.id, i));
-
-        stepItem.append(badge, stepText, stepCheckbox);
-        stepsList.appendChild(stepItem);
-    }
-
-    section.append(header, stepsList);
-    return section;
-}
-
-// 전체 기준(필터 무관) 완료 비율로 프로그레스 바와 텍스트를 갱신한다.
-function updateProgress() {
-    const all = loadTodos();
-    const total = all.length;
-    const done = all.filter((t) => t.completed).length;
-    const percent = total === 0 ? 0 : Math.round((done / total) * 100);
-    progressBarFillEl.style.width = percent + "%";
-    progressBarFillEl.closest("[role='progressbar']").setAttribute("aria-valuenow", percent);
-    progressTextEl.textContent = `${done} / ${total} 완료 (${percent}%)`;
-}
-
-// 활성 필터를 바꾸고 버튼의 active 클래스를 동기화한 뒤 다시 그린다.
-function setFilter(filter) {
-    currentFilter = filter;
-    for (const btn of filterButtonEls) {
-        btn.classList.toggle("active", btn.dataset.filter === filter);
-    }
-    renderTodos();
-}
-
-// ---------- 이벤트 핸들러 ----------
-
-// 입력값을 검사 후 새 할 일을 추가한다 (빈 문자열은 무시).
-// "자동" 선택 시 키워드 기반으로 카테고리를 결정해 저장한다.
-function handleAdd() {
-    const text = todoInputEl.value.trim();
-    if (!text) return;
-    const category = resolveCategory(categorySelectEl.value, text);
-    addTodo(text, category);
-    todoInputEl.value = "";
-    updateAutoHint();
-    renderTodos();
-}
-
-// 입력 텍스트와 셀렉트 상태를 보고 자동 분류 미리보기 힌트를 갱신한다.
-function updateAutoHint() {
-    if (!autoHintEl) return;
-    if (categorySelectEl.value !== "auto") {
-        autoHintEl.hidden = true;
-        return;
-    }
-    const text = todoInputEl.value.trim();
-    if (!text) {
-        autoHintEl.hidden = true;
-        return;
-    }
-    const category = classifyByKeywords(text);
-    autoHintEl.hidden = false;
-    autoHintEl.textContent = `자동 분류: ${CATEGORY_LABELS[category]}`;
-}
-
-// 해당 li를 인라인 편집 UI로 교체하고 저장(Enter) / 취소(Esc) 동작을 연결한다.
-// 편집 모드: li.todo-item.editing (flex-direction: row; flex-wrap: wrap) 으로 복원
-function startEdit(li, todo) {
-    li.innerHTML = "";
-    li.classList.add("editing");
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "edit-input";
-    input.value = todo.text;
-    input.setAttribute("aria-label", "할 일 텍스트 편집");
-
-    const select = document.createElement("select");
-    select.className = "edit-category";
-    select.setAttribute("aria-label", "카테고리 선택");
-    const autoOpt = document.createElement("option");
-    autoOpt.value = "auto";
-    autoOpt.textContent = "자동";
-    select.appendChild(autoOpt);
-    for (const [value, label] of Object.entries(CATEGORY_LABELS)) {
-        const opt = document.createElement("option");
-        opt.value = value;
-        opt.textContent = label;
-        if (value === todo.category) opt.selected = true;
-        select.appendChild(opt);
-    }
-
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.textContent = "저장";
-
-    const cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.textContent = "취소";
-
-    const commit = () => {
-        const newText = input.value.trim();
-        if (!newText) return;
-        const newCategory = resolveCategory(select.value, newText);
-        updateTodo(todo.id, newText, newCategory);
-        renderTodos();
+    // 저장 객체 구성
+    const entry = {
+      id:           Date.now().toString(),
+      title:        title,
+      category:     plan.category,
+      summary:      plan.summary,
+      action_steps: plan.action_steps,
+      createdAt:    new Date().toISOString(),
     };
 
-    const cancel = () => renderTodos();
+    // LocalStorage 저장
+    const plans = loadPlans();
+    plans.push(entry);
+    savePlans(plans);
 
-    saveBtn.addEventListener("click", commit);
-    cancelBtn.addEventListener("click", cancel);
-    input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") commit();
-        else if (e.key === "Escape") cancel();
-    });
+    // 현재 표시 plan 업데이트
+    currentPlanId = entry.id;
 
-    li.append(input, select, saveBtn, cancelBtn);
-    input.focus();
-    input.select();
+    // UI 갱신
+    renderResultCard(entry);
+    renderSidebar();
+
+    // 입력 초기화
+    titleInput.value = '';
+
+  }, 500);
 }
 
-// ---------- 초기화 ----------
+function toggleStep(planId, stepIdx) {
+  const plans = loadPlans();
+  const plan  = plans.find(p => p.id === planId);
+  if (!plan || !plan.action_steps[stepIdx]) return;
 
-// 페이지 로드 시 DOM 참조를 채우고, 이벤트를 연결하고, 첫 렌더를 수행한다.
-document.addEventListener("DOMContentLoaded", () => {
-    todoListEl           = document.getElementById("todo-list");
-    todoInputEl          = document.getElementById("todo-input");
-    categorySelectEl     = document.getElementById("category-select");
-    addButtonEl          = document.getElementById("add-button");
-    progressBarFillEl    = document.getElementById("progress-bar-fill");
-    progressTextEl       = document.getElementById("progress-text");
-    filterButtonEls      = document.querySelectorAll(".filter-button");
-    autoHintEl           = document.getElementById("auto-hint");
-    aiLoadingOverlayEl   = document.getElementById("ai-loading-overlay");
+  plan.action_steps[stepIdx].completed = !plan.action_steps[stepIdx].completed;
+  savePlans(plans);
 
-    addButtonEl.addEventListener("click", handleAdd);
-    todoInputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") handleAdd();
-    });
-    todoInputEl.addEventListener("input", updateAutoHint);
-    categorySelectEl.addEventListener("change", updateAutoHint);
-    updateAutoHint();
+  // DOM 직접 조작 — 전체 re-render 없이 취소선 토글
+  const stepsListEl = document.getElementById('steps-list');
+  if (!stepsListEl) return;
 
-    for (const btn of filterButtonEls) {
-        btn.addEventListener("click", () => setFilter(btn.dataset.filter));
+  const stepLi   = stepsListEl.querySelector(`[data-step-idx="${stepIdx}"]`);
+  if (!stepLi) return;
+
+  const textEl = stepLi.querySelector('.step-text');
+  if (textEl) {
+    textEl.classList.toggle('step-done', plan.action_steps[stepIdx].completed);
+  }
+
+  // 결과 카드 진행률 바 갱신
+  const total = plan.action_steps.length;
+  const done  = plan.action_steps.filter(s => s.completed).length;
+  const pct   = total === 0 ? 0 : Math.round((done / total) * 100);
+
+  const progressBar = document.getElementById('result-progress-bar');
+  if (progressBar) {
+    progressBar.style.width = pct + '%';
+    progressBar.closest('[role="progressbar"]').setAttribute('aria-valuenow', pct);
+  }
+
+  // 사이드바 진행률 바만 갱신 (re-render 없이)
+  const sidebarItem = document.querySelector(`[data-plan-id="${planId}"]`);
+  if (sidebarItem) {
+    const sidebarBar = sidebarItem.querySelector('[role="progressbar"] div');
+    if (sidebarBar) {
+      sidebarBar.style.width = pct + '%';
+      sidebarItem.querySelector('[role="progressbar"]').setAttribute('aria-valuenow', pct);
     }
+    const sidebarCount = sidebarItem.querySelector('p.text-\\[10px\\]');
+    if (sidebarCount) sidebarCount.textContent = `${done} / ${total}`;
+  }
+}
 
-    setFilter(currentFilter);
+function deletePlan(planId) {
+  const plans = loadPlans().filter(p => p.id !== planId);
+  savePlans(plans);
+
+  // 현재 표시 중인 plan이 삭제되면 결과 카드도 숨김
+  if (currentPlanId === planId) {
+    currentPlanId = null;
+    document.getElementById('result-section').hidden = true;
+  }
+
+  renderSidebar();
+}
+
+function loadAndShowPlan(planId) {
+  const plans = loadPlans();
+  const plan  = plans.find(p => p.id === planId);
+  if (!plan) return;
+
+  currentPlanId = planId;
+  renderResultCard(plan);
+  renderSidebar(); // active 스타일 동기화
+}
+
+// ────────────────────────────────────────────────
+// 토스트 메시지 (접근성: aria-live)
+// ────────────────────────────────────────────────
+function showToast(message) {
+  let toast = document.getElementById('toast-msg');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast-msg';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.className = [
+      'fixed bottom-6 left-1/2 -translate-x-1/2 z-40',
+      'bg-slate-800 border border-slate-700 text-slate-200 text-sm px-4 py-2.5 rounded-lg shadow-xl',
+      'transition-opacity duration-300',
+    ].join(' ');
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.style.opacity = '1';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
+
+// ────────────────────────────────────────────────
+// 초기화
+// ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // 생성 버튼 이벤트
+  document.getElementById('generate-btn').addEventListener('click', handleGenerate);
+
+  // Enter 키로도 생성 가능
+  document.getElementById('title-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleGenerate();
+  });
+
+  // 사이드바 초기 렌더
+  renderSidebar();
+
+  // 가장 최근 plan 자동 로드
+  const plans = loadPlans();
+  if (plans.length > 0) {
+    const latest = plans.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    loadAndShowPlan(latest.id);
+  }
 });
-    </script>
+  </script>
 </body>
 </html>
